@@ -1,0 +1,501 @@
+<!doctype HTML>
+<html>
+	<head>
+		<script>
+			addEventListener("error", (e) => {
+				alert(e.lineno+":"+e.colno+", "+e.message+"\nMain")
+			});
+		</script>
+		<meta charset="utf-8">
+		<style id="allCss">
+			body {
+				padding: 0px;
+				margin: 0px;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+			}
+			div {
+				visibility: visible;
+			}
+			canvas {
+				overflow: hidden;
+			}
+		</style>
+	<body>
+		<script src="https://unpkg.com/netplayjs@0.4.1/dist/netplay.js" integrity="sha384-6Yb8LWAT488jwK+nIjvD4S5/poq1Xn69NYjH1RXKHoaUOaFJrKQ1rfGQgKm8oQjX" crossorigin="anonymous"></script>
+		<script>
+			/*function start() {
+				new netplayjs.RollbackWrapper(Game).start();
+				startB.style.visibility='hidden';
+			}*/
+			
+			const 	buffs = [{"name":"Powerful stroke","desc":"Increases your max force by 10","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].cue.max = (thi["p"+id+"buff"].cue.max ?? 100)+10}},{"name":"8 Ball immunity","desc":"Hitting the 8 ball into the pocket early won't cause you to lose","stack":false,"turns":5,"mod": function (thi,id) {thi["p"+id+"buff"].pimm = 5}},{"name":"Gold flaked balls","desc":"Extra 2.5 points per ball sunk","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].ballPoints = (thi["p"+id+"buff"].ballPoints ?? 10)+2.5}},{"name":"Ice surface","desc":"Makes the surface of the table almost frictionless. The friction will increase as the ice melts until it's back to normal","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"buff"].ice = 5}},{"name":"Bouncy rubber sides","desc":"Makes the sides of the table very bouncy","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"buff"].bounce = 5}}]
+			const 	debuffs = [{"name":"Feeble stroke","desc":"Decreases your max force by 10","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].cue.max = (thi["p"+id+"buff"].cue.max ?? 100)-10}},{"name":"8 Ball bomb","desc":"The 8 ball explodes when hit, destroying nearby balls","stack":false,"turns":5,"mod": function (thi,id) {thi["p"+id+"debuff"].bomb = 5}},{"name":"Chipped balls","desc":"2.5 less points per ball sunk","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].ballPoints = (thi["p"+id+"buff"].ballPoints ?? 10)-2.5}},{"name":"Rubber surface","desc":"Makes the surface of the table extremely high friction (overrides ice)","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].rub = 5}},{"name":"Rubber sides","desc":"Makes the sides of the table only a little bouncy (overrides bouncy rubber)","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].rub2 = 5}}]
+			
+			function rotate(velocity, theta) {
+    			return [velocity[0] * Math.cos(theta) - velocity[1] * Math.sin(theta), velocity[0] * Math.sin(theta) + velocity[1] * Math.cos(theta)];
+			}
+			
+			function evalUpg(thi,pl,imm) {
+				thi.cue.max = thi["p"+pl+"buff"].cue.max ?? 100
+				thi.fric = thi["p"+pl+"debuff"].rub ? 0.975 : (thi["p"+pl+"buff"].ice ? 0.99+0.009/(6-thi["p"+pl+"buff"].ice) : 0.99)
+				thi.bounce = thi["p"+pl+"debuff"].rub2 ? 0.45 : (thi["p"+pl+"buff"].bounce ? 0.995 : 0.9)
+				if (!imm) {
+					if (thi["p"+pl+"buff"].pimm) thi["p"+pl+"buff"].pimm--
+					if (thi["p"+pl+"buff"].ice) thi["p"+pl+"buff"].ice--
+					if (thi["p"+pl+"buff"].bounce) thi["p"+pl+"buff"].bounce--
+					if (thi["p"+pl+"debuff"].bomb) thi["p"+pl+"debuff"].bomb--
+					if (thi["p"+pl+"debuff"].rub2) thi["p"+pl+"debuff"].rub2--
+					if (thi["p"+pl+"debuff"].rub) thi["p"+pl+"debuff"].rub--
+					//debug.innerHTML = JSON.stringify(thi["buffact"+pl])
+					for (const [key,value] of Object.entries(thi["buffact"+pl])) {
+						if (value && value !== true) thi["buffact"+pl][key]--
+					}
+					for (const [key,value] of Object.entries(thi["debuffact"+pl])) {
+						if (value && value !== true) thi["debuffact"+pl][key]--
+					}
+					//debug.innerHTML += JSON.stringify(thi["buffact"+pl])
+				}
+			}
+			
+			function evalWin(thi) {
+				if (thi.points0 > thi.points1) alert("Player 1 wins\n"+thi.points0+"-"+thi.points1)
+				else if (thi.points0 < thi.points1) alert("Player 2 wins\n"+thi.points0+"-"+thi.points1)
+				else alert("Draw\n"+thi.points0+"-"+thi.points1)
+				window.location = "./index.html"
+			}
+			
+			function ball(x,y,id) {
+				this.x = x
+				this.y = y
+				this.vx = 0
+				this.vy = 0
+				this.id = id
+				this.type = id == 16 ? -1 : (id == 8 ? 1 : (id > 8 ? 2 : 0))
+				this.hit = []
+			}
+			
+			function hole(x,y,size) {
+				this.x = x
+				this.y = y
+				this.size = size
+			}
+			
+			function diramp(a,b) {
+				return({"dir":(Math.atan2(a.y-b.y,a.x-b.x) ?? 0),"amp":Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2)})
+			}
+			
+			let pid
+			class Game extends netplayjs.Game {
+				static timestep = 1000 / 60;
+				static canvasSize = { width: 2130, height: 1170 };
+				constructor(canvas,players) {
+					super();
+					canvas.style.width = "100%"
+					canvas.style.height = "100%"
+					canvas.style.boxShadow = ""
+					canvas.style.margin = ""
+					canvas.style.position = "sticky"
+					//canvas.style.left = "0px"
+					canvas.getContext("2d").font = "20px Arial"
+					allCss.sheet.cssRules[1].style.visibility = "hidden"
+					canvas.style.zIndex = 2
+					this.balls /*haha so funny wow. so entertaining.*/ = []
+					const ids = [[9],[1,10],[11,8,2],[3,12,4,13],[14,5,6,15,7]]
+					for (let i=1;i<=5;i++) {
+						for (let j=0;j<i;j++) {
+							this.balls.push(new ball(1600+i*58,535+j*58-((i-1)/2)*58,ids[i-1][j]))
+						}
+					}
+					this.balls.push(new ball(500,535,16))
+					this.ballStor = [[],[]]
+					this.stor = []
+					this.cue = {"dir":0,"amp":0,"down":false,"max":100}
+					this.p0buff = {"cue":{}}
+					this.p1buff = {"cue":{}}
+					this.p0debuff = {}
+					this.p1debuff = {}
+					this.buffact0 = {}
+					this.buffact1 = {}
+					this.debuffact0 = {}
+					this.debuffact1 = {}
+					this.points0 = 0
+					this.points1 = 0
+					this.turn = 0
+					this.holes /*haha so funny wow. so entertaining.*/ = []
+					for (let i=0;i<=2;i++) {
+						this.holes.push(new hole(i*2130/2,0,(i == 1 ? 114.3 : 127)/2))
+						this.holes.push(new hole(i*2130/2,1070,(i == 1 ? 114.3 : 127)/2))
+					}
+					this.mode = 0
+					this.player = 0
+					players.forEach((e) => {
+						if (e.isLocal && pid == undefined) pid = e.id
+					})
+					this.fric = 0.99 //49.0332/60
+					this.bounce = 0.9
+					this.pass = 1
+					canvas.addEventListener("mousedown",(e) => {
+						this["player"+pid+"click"] = true
+					})
+					canvas.addEventListener("mouseup",(e) => {
+						this["player"+pid+"click"] = false
+					})
+				};
+				tick(playerInputs) {
+					for (const [player, input] of playerInputs.entries()) {
+						const pos = input.touches[0] ?? (this["player"+player.getID()+"click"] ? input.mousePosition : undefined)
+						switch (this.mode) {
+							case (0):
+								if (player.getID() == this.player) {
+									if (pos) {
+										const cue = diramp(pos,this.balls[15])
+										this.cue.dir = cue.dir
+										this.cue.amp = Math.min(cue.amp/5,this.cue.max)
+										this.cue.down = true
+									} else if (this.cue.down) {
+										this.cue.down = false
+										this.player += 2
+										this.cue.anim = 0
+									}
+								}
+								break;
+							case (1):
+								if (player.getID() == this.player) {
+									if (pos) {
+										this.balls[15].x = pos.x
+										this.balls[15].y = pos.y
+										let valid = true
+										this.balls.forEach((e) => {
+											if (e.id != 16 && ((e.x-this.balls[15].x)**2+(e.y-this.balls[15].y)**2) <= 3266.1225) valid = false
+										})
+										if (valid) this.mode = 0
+									}
+								}
+								break;
+							case (3):
+							case (2):
+								if (pos) {
+									if (this["buffsel"+player.getID()].length != 0 && Math.abs(200-pos.x) <= 150 && Math.abs(500-pos.y) <= 450) {
+										const buff = buffs[this["buffsel"+player.getID()][Math.floor((pos.y-50)/300)]]
+										buff.mod(this,player.getID())
+										this["buffact"+player.getID()][buff.name] = buff.turns ?? true
+										this["buffsel"+player.getID()] = []
+									}
+									if (this["debuffsel"+player.getID()].length != 0 && Math.abs(2020-pos.x) <= 150 && Math.abs(500-pos.y) <= 450) {
+										const debuff = debuffs[this["debuffsel"+player.getID()][Math.floor((pos.y-50)/300)]]
+										debuff.mod(this,player.getID())
+										this["debuffact"+player.getID()][debuff.name] = debuff.turns ?? true
+										this["debuffsel"+player.getID()] = []
+									}
+								} else {
+									if (this.player == player.getID() && this.debuffsel1.length == 0 && this.buffsel1.length == 0 && this.debuffsel0.length == 0 && this.buffsel0.length == 0) {
+										evalUpg(this,this.player,true)
+										this.mode -= 2
+									}
+								}
+								break;
+							}
+						//}
+					};
+					if (this.cue.anim != undefined) {
+						this.cue.anim += this.cue.amp/6
+						if (this.cue.anim >= this.cue.amp) {
+							this.cue.anim = undefined
+							this.balls[15].vx = Math.cos(this.cue.dir)*this.cue.amp
+							this.balls[15].vy = Math.sin(this.cue.dir)*this.cue.amp
+						}
+					}
+					this.balls.forEach((e,ee) => {
+					if (!e.storage && !e.destroy) {
+						if (!e.pocket) {
+							const canhit = this.balls.filter(b => !b.pocket && !b.destroy && b.id != e.id && !e.hit.includes(b.id) && (b.x-e.x)**2+(b.y-e.y)**2 <= 3266.1225+e.vx**2+e.vy**2+b.vx**2+b.vy**2/*r1^2 + r2^2*/)
+							for (let i=0;i<Math.sqrt(e.vx**2+e.vy**2);i++) {
+								let sime = JSON.parse(JSON.stringify(e))
+								sime.x += Math.cos(Math.atan2(sime.vy,sime.vx))*i
+								sime.y += Math.sin(Math.atan2(sime.vy,sime.vx))*i
+								let coll = false
+								if (sime.x <= 28.575) {
+									sime.vx = Math.abs(e.vx)*this.bounce
+									coll = true
+								}
+								if (sime.x >= 2130-28.575) {
+									sime.vx = -Math.abs(e.vx)*this.bounce
+									coll = true
+								}
+								if (sime.y <= 28.575) {
+									sime.vy = Math.abs(e.vy)*this.bounce
+									coll = true
+								}
+								if (sime.y >= 1070-28.575) {
+									sime.vy = -Math.abs(e.vy)*this.bounce
+									coll = true
+								}
+								if (canhit.length > 0) {
+									canhit.filter(b => (b.x-sime.x)**2+(b.y-sime.y)**2 <= 3266.12/*r1^2 + r2^2*/).forEach((eee) => {
+										if (this["p"+this.player%2+"debuff"].bomb) {
+											if (e.type == 1) this.balls.filter(b => !b.pocket && Math.abs(1-b.type) == 1 && b.id != e.id && Math.sqrt((b.x-e.x)**2+(b.y-e.y)**2) <= 57.15*2).forEach((eeee) => {eeee.destroy = true;eeee.vx=0;eeee.vy=0;if (eeee.type == this.stor[this.player%2]) this["points"+this.player%2] -= 10})
+											if (eee.type == 1) this.balls.filter(b => !b.pocket && Math.abs(1-b.type) == 1 && b.id != e.id && Math.sqrt((b.x-eee.x)**2+(b.y-eee.y)**2) <= 57.15*2).forEach((eeee) => {eeee.destroy = true;eeee.vx=0;eeee.vy=0;if (eeee.type == this.stor[this.player%2]) this["points"+this.player%2] -= 10})
+										}
+										e.hit.push(eee.id)
+										eee.hit.push(e.id)
+										coll = true
+										const rel = diramp(sime,eee)
+										const cent = {"x":(sime.x+eee.x)/2,"y":(sime.y+eee.y)/2}
+										sime.x = cent.x+Math.cos(rel.dir)*28.575
+										sime.y = cent.y+Math.sin(rel.dir)*28.575
+										eee.x = cent.x+Math.cos(rel.dir+Math.PI)*28.575
+										eee.y = cent.y+Math.sin(rel.dir+Math.PI)*28.575
+                    				const theta = -Math.atan2(eee.y - sime.y, eee.x - sime.x);
+                    				const u1 = rotate([sime.vx,sime.vy], theta);
+                    				const u2 = rotate([eee.vx,eee.vy], theta);
+                    				const v1 = rotate([u1[0]*(1-this.pass)+u2[0]*this.pass, u1[1]], -theta);
+                    				const v2 = rotate([u2[0]*(1-this.pass)+u1[0]*this.pass, u2[1]], -theta);
+                    				sime.vx = v1[0];
+                    				sime.vy = v1[1];
+                    				eee.vx = v2[0];
+                    				eee.vy = v2[1];
+									})
+								}
+								this.holes.filter(h => Math.sqrt((sime.x-h.x)**2+(sime.y-h.y)**2) <= (h.size)).forEach((eee) => {
+									coll = true
+									const pdiramp = diramp(sime,eee)
+									sime.x = eee.x+Math.cos(pdiramp.dir)*(eee.size-28.575)
+									sime.y = eee.y+Math.sin(pdiramp.dir)*(eee.size-28.575)
+									e.pocket = eee
+									if (e.type == 1) {
+										if (this.ballStor[this.player%2].length+this.balls.filter((b) => b.type == this.stor[this.player%2] && e.destroy).length < 7) {
+											if (this["p"+this.player%2+"buff"].pimm) {
+												e.pocket = undefined
+												sime.x = eee.x+Math.cos(pdiramp.dir)*(eee.size+0.1)
+												sime.y = eee.y+Math.sin(pdiramp.dir)*(eee.size+0.1)
+											} else {
+												//alert("player "+((this.player+1)%2+1)+" wins")
+												this["points"+(this.player+1)%2] += 100
+												evalWin(this)
+												//window.location = "./index.html"
+											}
+										} else {
+											//alert("player "+(this.player%2+1)+" wins")
+											this["points"+(this.player)%2] += 100
+											evalWin(this)
+											//window.location = "./index.html"
+										}
+									} else if (e.type >= 0) {
+										if (this.stor[this.player%2] == undefined && Math.abs(1-e.type)==1) {
+											this.stor[this.player%2] = e.type
+											this.stor[1-(this.player%2)] = 2-e.type
+										}
+									}
+								})
+								if (coll) {
+									e.vx = sime.vx
+									e.vy = sime.vy
+									e.x = sime.x
+									e.y = sime.y
+									break;
+								}
+								if (e.pocket) {
+									const pdiramp = diramp(sime,e.pocket)
+									if (pdiramp.amp > (e.pocket.size-28.575)) {
+										coll = true
+										sime.x = e.pocket.x+Math.cos(pdiramp.dir)*(e.pocket.size-28.575)
+										sime.y = e.pocket.y+Math.sin(pdiramp.dir)*(e.pocket.size-28.575)
+										sime.vx *= -this.bounce
+										sime.vy *= -this.bounce
+								}
+							} 
+							}
+						} else {
+							const pdiramp = diramp(e,e.pocket)
+							if (pdiramp.amp > (e.pocket.size-28.575)) {
+							e.x = e.pocket.x+Math.cos(pdiramp.dir)*(e.pocket.size-28.575)
+							e.y = e.pocket.y+Math.sin(pdiramp.dir)*(e.pocket.size-28.575)
+							e.vx *= -1
+							e.vy *= -1
+						}
+					}
+						/*this.holes.filter(h => Math.sqrt((h.x-e.x)**2+(h.y-e.y)**2) <= (28.575+h.size)).forEach((eee) => {
+							e.x = eee.x
+							e.y = eee.y
+							e.pocket = true
+						})*/
+						e.hit = []
+						e.x += e.vx
+						e.y += e.vy
+						const vel = diramp({"x":e.vx,"y":e.vy},{"x":0,"y":0})
+						e.vx = Math.cos(vel.dir)*(vel.amp*this.fric)
+						e.vy = Math.sin(vel.dir)*(vel.amp*this.fric)
+						if (Math.abs(e.vx) <= 0.1) e.vx = 0
+						if (Math.abs(e.vy) <= 0.1) e.vy = 0
+					}
+					})
+					if (this.player > 1 && this.cue.anim == undefined && this.balls.find(b => !b.destroy && (b.vx != 0 || b.vy != 0)) == undefined) {
+						const pocketed = this.balls.filter(b => b.pocket && b.type != -1)
+						if (this.balls[15].pocket) {
+							this.balls[15].pocket = undefined
+							this.mode = 1
+						}
+						pocketed.forEach((e) => {
+							const ind = this.stor.indexOf(e.type)
+							this["points"+ind] += this["p"+ind+"buff"].ballPoints ?? 10
+							this.ballStor[ind].push(this.id)
+							e.y = 1130
+							if (ind) e.x = 2030-this.ballStor[ind].length*57.15
+							else e.x = 160+this.ballStor[ind].length*57.15
+							e.pocket = undefined
+						})
+						if (this.mode < 2 && pocketed.length == 0 || pocketed.find(p => p.type != this.stor[this.player%2])) {
+							this.player = (this.player+1)%2
+							evalUpg(this,this.player,false)
+							this.turn += 0.5
+							if (this.turn%3 == 0) {
+								this.mode += 2
+								let weight = []
+								debug.innerHTML = ""
+								buffs.forEach((e,ee) => {
+									if (e.stack || !(this.buffact0[e.name])) weight.push(ee)
+									debug.innerHTML += this.buffact0[e.name]+"-"+e.stack+"-"+(e.stack || !(this.buffact0[e.name]))
+								})
+								this.buffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
+								weight = []
+								buffs.forEach((e,ee) => {
+									if (e.stack || !(this.buffact1[e.name])) weight.push(ee)
+								})
+								this.buffsel1 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
+								weight = []
+								debuffs.forEach((e,ee) => {
+									if (e.stack || !(this.debuffact0[e.name])) weight.push(ee)
+								})
+								this.debuffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
+								weight = []
+								debuffs.forEach((e,ee) => {
+									if (e.stack || !(this.debuffact1[e.name])) weight.push(ee)
+								})
+								this.debuffsel1 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
+							}
+						} else this.player = this.player%2
+					}
+				};
+				draw(canvas) {
+					canvas.style.top = "0px"
+					const ctx = canvas.getContext("2d");
+					ctx.strokeStyle = "#AAAAAA"
+					ctx.fillStyle = "#00AA00";
+					ctx.fillRect(0, 0, canvas.width, canvas.height);
+					ctx.fillStyle = "#000000"
+					this.holes.forEach((e) => {
+						ctx.beginPath()
+						ctx.arc(e.x,e.y,e.size,0,2*Math.PI)
+						ctx.fill()
+					})
+					ctx.font = "75px Arial"
+					ctx.fillStyle = ["#AA4400","#AAAAFF"][pid]
+					ctx.fillRect(0, 1071, canvas.width, 100);
+					ctx.fillStyle = "#000000"
+					ctx.fillText("p1",10,1130)
+					ctx.fillText("p2",2030,1130)
+					ctx.font = "30px Arial"
+					ctx.fillText(this.points0,10,1170)
+					ctx.fillText(this.points1,2030-ctx.measureText(this.points1).width,1170)
+					ctx.font = "20px Arial"
+					this.balls.filter((b) => !b.destroy).forEach((e) => {
+						if (e.type == -1) ctx.fillStyle = "#FFFFFF"
+						else ctx.fillStyle = "hsl("+([0,30,60,120,180,240,300,0][e.id-(e.type == 2 ? 9 : 1)])+" "+(e.type == 1 ? 0 : (e.type == 2 ? 50 : 100))+" "+(e.type == 1 ? 25 : (e.type == 0 ? 50 : 35))+")"
+						ctx.beginPath()
+						ctx.arc(e.x,e.y,57.15/2,0,2*Math.PI)
+						ctx.fill()
+						if (e.type != -1) {
+							ctx.fillStyle = "#FFFFFF"
+							ctx.beginPath()
+							ctx.arc(e.x,e.y,12,0,2*Math.PI)
+							ctx.fill()
+							ctx.fillStyle = "#000000"
+							ctx.fillText(e.id,e.x-ctx.measureText(e.id).width/2,e.y+8)
+						}
+						/*if (e.type == 2) {
+							ctx.lineWidth = 5
+							ctx.strokeStyle = "#FFFFFF"
+							ctx.beginPath()
+							ctx.arc(e.x,e.y,57.15/2,0,2*Math.PI)
+							ctx.stroke()
+						}*/
+						//ctx.strokeText("hsl("+([0,30,60,120,180,240,300,0][e.id-(e.type == 2 ? 9 : 1)])+" "+(e.type == 1 ? 0 : 100)+" "+(e.type == 1 ? 25 : (e.type == 0 ? 50 : 85))+")",e.x,e.y)
+						//const eee = this.holes[0]
+						//ctx.fillText(Math.sqrt((e.x-eee.x)**2+(e.y-eee.y)**2)+", "+(eee.size+28.575),e.x,e.y-30)
+					})
+					if (this.mode == 0 && this.player < 2 || this.cue.anim != undefined) {
+						ctx.lineWidth = 10
+						ctx.strokeStyle = ["#AA4400","#AAAAFF","#AA4400","#AAAAFF"][this.player]
+						ctx.beginPath()
+						ctx.moveTo(this.balls[15].x+Math.cos(this.cue.dir+Math.PI)*(29+this.cue.amp-(this.cue.anim ?? 0)),this.balls[15].y+Math.sin(this.cue.dir+Math.PI)*(29+this.cue.amp-(this.cue.anim ?? 0)))
+						ctx.lineTo(this.balls[15].x+Math.cos(this.cue.dir+Math.PI)*(529+this.cue.amp-(this.cue.anim ?? 0)),this.balls[15].y+Math.sin(this.cue.dir+Math.PI)*(529+this.cue.amp-(this.cue.anim ?? 0)))
+						ctx.stroke()
+						ctx.strokeStyle = "#DDDDDD"
+						ctx.beginPath()
+						ctx.moveTo(this.balls[15].x+Math.cos(this.cue.dir+Math.PI)*(29+this.cue.amp-(this.cue.anim ?? 0)),this.balls[15].y+Math.sin(this.cue.dir+Math.PI)*(29+this.cue.amp-(this.cue.anim ?? 0)))
+						ctx.lineTo(this.balls[15].x+Math.cos(this.cue.dir+Math.PI)*(79+this.cue.amp-(this.cue.anim ?? 0)),this.balls[15].y+Math.sin(this.cue.dir+Math.PI)*(79+this.cue.amp-(this.cue.anim ?? 0)))
+						ctx.stroke()
+						ctx.lineWidth = 5
+						ctx.strokeStyle = "#AAAAAAAA"
+						ctx.moveTo(this.balls[15].x,this.balls[15].y)
+						ctx.lineTo(this.balls[15].x+Math.cos(this.cue.dir)*this.cue.amp*5,this.balls[15].y+Math.sin(this.cue.dir)*this.cue.amp*5)
+						ctx.stroke()
+					}
+					if (this.mode == 2 || this.mode == 3) {
+						this["buffsel"+pid].forEach((e,ee) => {
+							const eee = buffs[e]
+							ctx.fillStyle = "#00AA33"
+							ctx.strokeStyle = "#006600"
+							ctx.fillRect(50,50+ee*300,300,300)
+							ctx.strokeRect(50,50+ee*300,300,300)
+							ctx.fillStyle = "#000000"
+							ctx.font = "30px Arial"
+							const split = eee.desc.split(" ")
+							let i=0
+							let j=0
+							ctx.fillText(eee.name,55,100+ee*300)
+							while (i < split.length) {
+								let join = ""
+								while (i < split.length && ctx.measureText(join+(join == "" ? "" : " ")+split[i]).width < 290) {
+									join = join+(join == "" ? "" : " ")+split[i]
+									i++
+								}
+								ctx.fillText(join,55,140+ee*300+j*30)
+								j++
+							}
+							if (eee.turns) {
+								ctx.fillText(eee.turns+" turns",55,340+ee*300)
+							}
+						})
+						this["debuffsel"+pid].forEach((e,ee) => {
+							const eee = debuffs[e]
+							ctx.fillStyle = "#AA3300"
+							ctx.strokeStyle = "#660000"
+							ctx.fillRect(1780,50+ee*300,300,300)
+							ctx.strokeRect(1780,50+ee*300,300,300)
+							ctx.fillStyle = "#FFFFFF"
+							ctx.font = "30px Arial"
+							const split = eee.desc.split(" ")
+							let i=0
+							let j=0
+							ctx.fillText(eee.name,1785,100+ee*300)
+							while (i < split.length) {
+								let join = ""
+								while (i < split.length && ctx.measureText(join+(join == "" ? "" : " ")+split[i]).width < 290) {
+									join = join+(join == "" ? "" : " ")+split[i]
+									i++
+								}
+								ctx.fillText(join,1785,140+ee*300+j*30)
+								j++
+							}
+						})
+					}
+				};
+			};
+			//new netplayjs.LocalWrapper(Game).start();
+			new netplayjs.RollbackWrapper(Game).start();
+		</script>
+	</body>
+</html>
