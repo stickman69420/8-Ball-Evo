@@ -333,7 +333,9 @@
 					})
 					if (this.player > 1 && this.cue.anim == undefined && this.balls.find(b => !b.destroy && (b.vx != 0 || b.vy != 0)) == undefined) {
 						const pocketed = this.balls.filter(b => b.pocket && b.type != -1)
+						let v = true
 						if (this.balls[15].pocket) {
+							v = false
 							this.balls[15].pocket = undefined
 							this.mode = 1
 						}
@@ -346,17 +348,15 @@
 							else e.x = 160+this.ballStor[ind].length*57.15
 							e.pocket = undefined
 						})
-						if (this.mode < 2 && pocketed.length == 0 || pocketed.find(p => p.type != this.stor[this.player%2])) {
+						if (this.mode < 2 && pocketed.length == 0 || !v || pocketed.find(p => p.type != this.stor[this.player%2])) {
 							this.player = (this.player+1)%2
 							evalUpg(this,this.player,false)
 							this.turn += 0.5
 							if (this.turn%3 == 0) {
 								this.mode += 2
 								let weight = []
-								debug.innerHTML = ""
 								buffs.forEach((e,ee) => {
 									if (e.stack || !(this.buffact0[e.name])) weight.push(ee)
-									debug.innerHTML += this.buffact0[e.name]+"-"+e.stack+"-"+(e.stack || !(this.buffact0[e.name]))
 								})
 								this.buffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
 								weight = []
@@ -494,8 +494,8 @@
 					}
 				};
 			};
-			//new netplayjs.LocalWrapper(Game).start();
-			new netplayjs.RollbackWrapper(Game).start();
+			new netplayjs.LocalWrapper(Game).start();
+			//new netplayjs.RollbackWrapper(Game).start();
 		</script>
 	</body>
 </html>
