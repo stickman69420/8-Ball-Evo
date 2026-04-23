@@ -427,7 +427,7 @@
 									if (e.stack || !(this.buffact0[e.name])) weight.push(ee)
 								})
 								this.buffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
-								this.buffsel0[0] = buffs.length-1
+								//this.buffsel0[0] = buffs.length-1
 								weight = []
 								buffs.forEach((e,ee) => {
 									if (e.stack || !(this.buffact1[e.name])) weight.push(ee)
@@ -438,7 +438,7 @@
 									if (e.stack || !(this.debuffact0[e.name])) weight.push(ee)
 								})
 								this.debuffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
-								this.debuffsel0[0] = debuffs.length-1
+								//this.debuffsel0[0] = debuffs.length-1
 								weight = []
 								debuffs.forEach((e,ee) => {
 									if (e.stack || !(this.debuffact1[e.name])) weight.push(ee)
