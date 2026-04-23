@@ -30,8 +30,8 @@
 				startB.style.visibility='hidden';
 			}*/
 			
-			const 	buffs = [{"name":"Powerful stroke","desc":"Increases your max force by 10","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].cue.max = (thi["p"+id+"buff"].cue.max ?? 100)+10}},{"name":"8 Ball immunity","desc":"Hitting the 8 ball into the pocket early won't cause you to lose","stack":false,"turns":5,"mod": function (thi,id) {thi["p"+id+"buff"].pimm = 5}},{"name":"Gold flaked balls","desc":"Extra 2.5 points per ball sunk","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].ballPoints = (thi["p"+id+"buff"].ballPoints ?? 10)+2.5}},{"name":"Ice surface","desc":"Makes the surface of the table almost frictionless. The friction will increase as the ice melts until it's back to normal","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"buff"].ice = 5}},{"name":"Bouncy rubber sides","desc":"Makes the sides of the table very bouncy","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"buff"].bounce = 5}}]
-			const 	debuffs = [{"name":"Feeble stroke","desc":"Decreases your max force by 10","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].cue.max = (thi["p"+id+"buff"].cue.max ?? 100)-10}},{"name":"8 Ball bomb","desc":"The 8 ball explodes when hit, destroying nearby balls","stack":false,"turns":5,"mod": function (thi,id) {thi["p"+id+"debuff"].bomb = 5}},{"name":"Chipped balls","desc":"2.5 less points per ball sunk","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].ballPoints = (thi["p"+id+"buff"].ballPoints ?? 10)-2.5}},{"name":"Rubber surface","desc":"Makes the surface of the table extremely high friction (overrides ice)","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].rub = 5}},{"name":"Rubber sides","desc":"Makes the sides of the table only a little bouncy (overrides bouncy rubber)","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].rub2 = 5}}]
+			const 	buffs = [{"name":"Powerful stroke","desc":"Increases your max force by 10","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].cue.max = (thi["p"+id+"buff"].cue.max ?? 100)+10}},{"name":"8 Ball immunity","desc":"Hitting the 8 ball into the pocket early won't cause you to lose","stack":false,"turns":5,"mod": function (thi,id) {thi["p"+id+"buff"].pimm = 5}},{"name":"Gold flaked balls","desc":"Extra 2.5 points per ball sunk","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].ballPoints = (thi["p"+id+"buff"].ballPoints ?? 10)+2.5}},{"name":"Ice surface","desc":"Makes the surface of the table almost frictionless. The friction will increase as the ice melts until it's back to normal","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"buff"].ice = 5}},{"name":"Bouncy rubber sides","desc":"Makes the sides of the table very bouncy","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"buff"].bounce = 5}},{"name":"Quick fingers","desc":"Move the cue ball while your opponent isn't looking","turns":1,"stack":false,"mod": function (thi,id) {thi["p"+id+"buff"].move = true}}]
+			const 	debuffs = [{"name":"Feeble stroke","desc":"Decreases your max force by 10","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].cue.max = (thi["p"+id+"buff"].cue.max ?? 100)-10}},{"name":"8 Ball bomb","desc":"The 8 ball explodes when hit, destroying nearby balls","stack":false,"turns":5,"mod": function (thi,id) {thi["p"+id+"debuff"].bomb = 5}},{"name":"Chipped balls","desc":"2.5 less points per ball sunk","stack":true,"mod": function (thi,id) {thi["p"+id+"buff"].ballPoints = (thi["p"+id+"buff"].ballPoints ?? 10)-2.5}},{"name":"Rubber surface","desc":"Makes the surface of the table extremely high friction (overrides ice)","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].rub = 5}},{"name":"Rubber sides","desc":"Makes the sides of the table only a little bouncy (overrides bouncy rubber)","turns":5,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].rub2 = 5}},{"name":"Rotate gravity","desc":"Flips the gravity to be at the bottom of the screen instead. Adds walls to protect the pockets","turns":1,"stack":false,"mod": function(thi,id) {thi["p"+id+"debuff"].grav = 2}}]
 			
 			function rotate(velocity, theta) {
     			return [velocity[0] * Math.cos(theta) - velocity[1] * Math.sin(theta), velocity[0] * Math.sin(theta) + velocity[1] * Math.cos(theta)];
@@ -40,14 +40,34 @@
 			function evalUpg(thi,pl,imm) {
 				thi.cue.max = thi["p"+pl+"buff"].cue.max ?? 100
 				thi.fric = thi["p"+pl+"debuff"].rub ? 0.975 : (thi["p"+pl+"buff"].ice ? 0.99+0.009/(6-thi["p"+pl+"buff"].ice) : 0.99)
-				thi.bounce = thi["p"+pl+"debuff"].rub2 ? 0.45 : (thi["p"+pl+"buff"].bounce ? 0.995 : 0.9)
+				//alert((1+(thi["p"+pl+"debuff"].grav > 1)))
+				thi.bounce = (thi["p"+pl+"debuff"].rub2 ? 0.45 : (thi["p"+pl+"buff"].bounce ? 0.995 : 0.9))//(1+9*(thi["p"+pl+"debuff"].grav > 1))
+				if (!imm) {
+					thi.walls.filter((w) => w.type == 0).forEach((e) => {
+						thi.walls.splice(thi.walls.indexOf(e),1)
+					})
+				}
+				if (thi["p"+pl+"debuff"].grav > 1) {
+					thi.walls.push(new wall(127/2,970,10,100,0))
+					thi.walls.push(new wall(2130-127/2-10,970,10,100,0))
+					thi.walls.push(new wall(2130/2+114.3/2,970,10,100,0))
+					thi.walls.push(new wall(2130/2-114.3/2-10,970,10,100,0))
+				}
+				if (thi["p"+pl+"buff"].move) {
+					thi.mode++
+					thi.canPocket = false
+				}
+				if (thi["p"+pl+"debuff"].grav) thi.bounce *= 0.2
 				if (!imm) {
 					if (thi["p"+pl+"buff"].pimm) thi["p"+pl+"buff"].pimm--
 					if (thi["p"+pl+"buff"].ice) thi["p"+pl+"buff"].ice--
 					if (thi["p"+pl+"buff"].bounce) thi["p"+pl+"buff"].bounce--
+					if (thi["p"+pl+"buff"].move) thi["p"+pl+"buff"].move = false
 					if (thi["p"+pl+"debuff"].bomb) thi["p"+pl+"debuff"].bomb--
 					if (thi["p"+pl+"debuff"].rub2) thi["p"+pl+"debuff"].rub2--
 					if (thi["p"+pl+"debuff"].rub) thi["p"+pl+"debuff"].rub--
+					if (thi["p"+pl+"debuff"].grav) thi["p"+pl+"debuff"].grav--
+					
 					//debug.innerHTML = JSON.stringify(thi["buffact"+pl])
 					for (const [key,value] of Object.entries(thi["buffact"+pl])) {
 						if (value && value !== true) thi["buffact"+pl][key]--
@@ -76,10 +96,20 @@
 				this.hit = []
 			}
 			
+			
+			
 			function hole(x,y,size) {
 				this.x = x
 				this.y = y
 				this.size = size
+			}
+			
+			function wall(x,y,dx,dy,type) {
+				this.x = x
+				this.y = y
+				this.dx = dx
+				this.dy = dy
+				this.type = type
 			}
 			
 			function diramp(a,b) {
@@ -123,11 +153,13 @@
 					this.points0 = 0
 					this.points1 = 0
 					this.turn = 0
+					this.canPocket = true
 					this.holes /*haha so funny wow. so entertaining.*/ = []
 					for (let i=0;i<=2;i++) {
 						this.holes.push(new hole(i*2130/2,0,(i == 1 ? 114.3 : 127)/2))
 						this.holes.push(new hole(i*2130/2,1070,(i == 1 ? 114.3 : 127)/2))
 					}
+					this.walls = []
 					this.mode = 0
 					this.player = 0
 					players.forEach((e) => {
@@ -146,6 +178,7 @@
 				tick(playerInputs) {
 					for (const [player, input] of playerInputs.entries()) {
 						const pos = input.touches[0] ?? (this["player"+player.getID()+"click"] ? input.mousePosition : undefined)
+						if (player.getID() == this.player) this.canPocket = false
 						switch (this.mode) {
 							case (0):
 								if (player.getID() == this.player) {
@@ -180,13 +213,13 @@
 									if (this["buffsel"+player.getID()].length != 0 && Math.abs(200-pos.x) <= 150 && Math.abs(500-pos.y) <= 450) {
 										const buff = buffs[this["buffsel"+player.getID()][Math.floor((pos.y-50)/300)]]
 										buff.mod(this,player.getID())
-										this["buffact"+player.getID()][buff.name] = buff.turns ?? true
+										this["buffact"+player.getID()][buff.name] = buff.turns+1 || true
 										this["buffsel"+player.getID()] = []
 									}
 									if (this["debuffsel"+player.getID()].length != 0 && Math.abs(2020-pos.x) <= 150 && Math.abs(500-pos.y) <= 450) {
 										const debuff = debuffs[this["debuffsel"+player.getID()][Math.floor((pos.y-50)/300)]]
 										debuff.mod(this,player.getID())
-										this["debuffact"+player.getID()][debuff.name] = debuff.turns ?? true
+										this["debuffact"+player.getID()][debuff.name] = debuff.turns+1 || true
 										this["debuffsel"+player.getID()] = []
 									}
 								} else {
@@ -218,18 +251,23 @@
 								let coll = false
 								if (sime.x <= 28.575) {
 									sime.vx = Math.abs(e.vx)*this.bounce
+									sime.x = 28.575+(28.575-sime.x)
 									coll = true
 								}
 								if (sime.x >= 2130-28.575) {
 									sime.vx = -Math.abs(e.vx)*this.bounce
+									sime.x = (2130-28.575)+(2130-28.575)-sime.x
 									coll = true
 								}
 								if (sime.y <= 28.575) {
 									sime.vy = Math.abs(e.vy)*this.bounce
+									sime.y = 28.575+28.575-sime.y
 									coll = true
 								}
 								if (sime.y >= 1070-28.575) {
 									sime.vy = -Math.abs(e.vy)*this.bounce
+									if (this["p"+this.player%2+"debuff"].grav) sime.y = (1070-27.575)
+									else sime.y = (1070-28.575)+(1070-28.575)-sime.y
 									coll = true
 								}
 								if (canhit.length > 0) {
@@ -258,8 +296,30 @@
                     				eee.vy = v2[1];
 									})
 								}
-								this.holes.filter(h => Math.sqrt((sime.x-h.x)**2+(sime.y-h.y)**2) <= (h.size)).forEach((eee) => {
+								this.walls.filter(w => Math.abs(w.x-sime.x) <= 28.575+w.dx/2 && Math.abs(w.y-sime.y) <= 28.575+w.dy/2).forEach((eee) => {
 									coll = true
+									if (sime.x < eee.x || sime.x > eee.x + eee.dx) {
+										if (sime.x < eee.x+eee.dx/2) {
+											sime.vx = -Math.abs(sime.vx)
+											sime.x = eee.x-28.575
+										} else {
+											sime.vx = Math.abs(sime.vx)
+											sime.x = eee.x+eee.dx+28.575
+										}
+									} else {
+										if (sime.y < eee.y+eee.dy/2) {
+											sime.vy = -Math.abs(sime.vy)
+											sime.y = eee.y-28.575
+										} else {
+											sime.vy = Math.abs(sime.vy)
+											sime.y = eee.y+eee.dy+28.575
+										}
+									}
+								})
+								let cpo = true
+								this.holes.filter(h => Math.sqrt((sime.x-h.x)**2+(sime.y-h.y)**2) <= (h.size)).forEach((eee) => {
+									if (this.type == -1) cpo = false
+									if (this.type != -1 || this.canPocket)  {coll = true
 									const pdiramp = diramp(sime,eee)
 									sime.x = eee.x+Math.cos(pdiramp.dir)*(eee.size-28.575)
 									sime.y = eee.y+Math.sin(pdiramp.dir)*(eee.size-28.575)
@@ -288,7 +348,12 @@
 											this.stor[1-(this.player%2)] = 2-e.type
 										}
 									}
+									}
 								})
+								if (e.type == -1 && !this.canPocket) {
+									this.canPocket = cpo
+									if (!cpo) this.balls[15].pocket = undefined
+								}
 								if (coll) {
 									e.vx = sime.vx
 									e.vy = sime.vy
@@ -324,6 +389,7 @@
 						e.hit = []
 						e.x += e.vx
 						e.y += e.vy
+						if (!e.pocket && e.y < 1040 && this["p"+this.player%2+"debuff"].grav) e.vy += 1
 						const vel = diramp({"x":e.vx,"y":e.vy},{"x":0,"y":0})
 						e.vx = Math.cos(vel.dir)*(vel.amp*this.fric)
 						e.vy = Math.sin(vel.dir)*(vel.amp*this.fric)
@@ -331,12 +397,14 @@
 						if (Math.abs(e.vy) <= 0.1) e.vy = 0
 					}
 					})
+					if (!this.canPocket) this.balls[15].pocket = undefined
 					if (this.player > 1 && this.cue.anim == undefined && this.balls.find(b => !b.destroy && (b.vx != 0 || b.vy != 0)) == undefined) {
 						const pocketed = this.balls.filter(b => b.pocket && b.type != -1)
 						let v = true
 						if (this.balls[15].pocket) {
 							v = false
 							this.balls[15].pocket = undefined
+							this.canPocket = false
 							this.mode = 1
 						}
 						pocketed.forEach((e) => {
@@ -352,13 +420,14 @@
 							this.player = (this.player+1)%2
 							evalUpg(this,this.player,false)
 							this.turn += 0.5
-							if (this.turn%3 == 0) {
+							if (this.turn%0.5 == 0) {
 								this.mode += 2
 								let weight = []
 								buffs.forEach((e,ee) => {
 									if (e.stack || !(this.buffact0[e.name])) weight.push(ee)
 								})
 								this.buffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
+								this.buffsel0[0] = buffs.length-1
 								weight = []
 								buffs.forEach((e,ee) => {
 									if (e.stack || !(this.buffact1[e.name])) weight.push(ee)
@@ -369,6 +438,7 @@
 									if (e.stack || !(this.debuffact0[e.name])) weight.push(ee)
 								})
 								this.debuffsel0 = Array(3).fill(0).map(v => weight[Math.floor(Math.random()*weight.length)])
+								this.debuffsel0[0] = debuffs.length-1
 								weight = []
 								debuffs.forEach((e,ee) => {
 									if (e.stack || !(this.debuffact1[e.name])) weight.push(ee)
@@ -400,6 +470,7 @@
 					ctx.fillText(this.points0,10,1170)
 					ctx.fillText(this.points1,2030-ctx.measureText(this.points1).width,1170)
 					ctx.font = "20px Arial"
+					//ctx.fillText(this.bounce,0,100)
 					this.balls.filter((b) => !b.destroy).forEach((e) => {
 						if (e.type == -1) ctx.fillStyle = "#FFFFFF"
 						else ctx.fillStyle = "hsl("+([0,30,60,120,180,240,300,0][e.id-(e.type == 2 ? 9 : 1)])+" "+(e.type == 1 ? 0 : (e.type == 2 ? 50 : 100))+" "+(e.type == 1 ? 25 : (e.type == 0 ? 50 : 35))+")"
@@ -414,6 +485,7 @@
 							ctx.fillStyle = "#000000"
 							ctx.fillText(e.id,e.x-ctx.measureText(e.id).width/2,e.y+8)
 						}
+						ctx.fillText(e.vx+", "+e.vy,e.x-ctx.measureText(e.id).width/2,e.y+60)
 						/*if (e.type == 2) {
 							ctx.lineWidth = 5
 							ctx.strokeStyle = "#FFFFFF"
@@ -424,6 +496,10 @@
 						//ctx.strokeText("hsl("+([0,30,60,120,180,240,300,0][e.id-(e.type == 2 ? 9 : 1)])+" "+(e.type == 1 ? 0 : 100)+" "+(e.type == 1 ? 25 : (e.type == 0 ? 50 : 85))+")",e.x,e.y)
 						//const eee = this.holes[0]
 						//ctx.fillText(Math.sqrt((e.x-eee.x)**2+(e.y-eee.y)**2)+", "+(eee.size+28.575),e.x,e.y-30)
+					})
+					this.walls.forEach((e) => {
+						ctx.fillStyle = "#FFFFFF"
+						ctx.fillRect(e.x,e.y,e.dx,e.dy)
 					})
 					if (this.mode == 0 && this.player < 2 || this.cue.anim != undefined) {
 						ctx.lineWidth = 10
@@ -489,6 +565,9 @@
 								}
 								ctx.fillText(join,1785,140+ee*300+j*30)
 								j++
+							}
+							if (eee.turns) {
+								ctx.fillText(eee.turns+" turns",1785,340+ee*300)
 							}
 						})
 					}
